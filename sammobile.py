@@ -137,20 +137,8 @@ class SammobileMysql:
         if self.cursor.execute(sql, (key, value)):
             return 1
 
-    # def insert_sample(self, sample):
-    # columns = ", ".join(keys)
-    # values_template = ", ".join(["%s"] * len(keys))
-    #
-    # sql = "insert into %s (%s) values (%s)" % (tablename, columns, values_template)
-    # values = tuple(rowdict[key] for key in keys)
-    # self.cursor.execute(sql, values)
-    #
-    #
-    #     sql = "INSERT INTO `firmwares` ( %s ) VALUES ( %s )" % (columns, placeholders)
-    #     print(sql)
-    #     self.cursor.execute(sql, sample.values())
-    #     self.connection.commit()
     def add_row(self, table_name, row_dict):
+        # inspired by : https://mail.python.org/pipermail/tutor/2010-December/080701.html
         self.cursor.execute("describe %s" % table_name)
         allowed_keys = set(row[0] for row in self.cursor.fetchall())
         keys = allowed_keys.intersection(row_dict)
