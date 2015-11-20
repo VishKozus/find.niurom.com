@@ -1,9 +1,3 @@
-# steps:
-# 1. keywords -> model_url
-# 2. model_url -> firmware_url
-# 3. firmware_url -> firmware_detail
-# 4. firmware_detail -> database
-
 import json
 import requests
 from bs4 import BeautifulSoup
@@ -143,13 +137,35 @@ class SammobileMysql:
         if self.cursor.execute(sql, (key, value)):
             return 1
 
-    def insert_sample(self, sample):
-        placeholders = ', '.join(['%s'] * len(sample))
-        columns = ', '.join(sample.keys())
-        sql = "INSERT INTO `firmwares` ( %s ) VALUES ( %s )" % (columns, placeholders)
-        print(sql)
-        self.cursor.execute(sql, sample.values())
-        self.connection.commit()
+    # def insert_sample(self, sample):
+    # columns = ", ".join(keys)
+    # values_template = ", ".join(["%s"] * len(keys))
+    #
+    # sql = "insert into %s (%s) values (%s)" % (tablename, columns, values_template)
+    # values = tuple(rowdict[key] for key in keys)
+    # self.cursor.execute(sql, values)
+    #
+    #
+    #     sql = "INSERT INTO `firmwares` ( %s ) VALUES ( %s )" % (columns, placeholders)
+    #     print(sql)
+    #     self.cursor.execute(sql, sample.values())
+    #     self.connection.commit()
+    def add_row(self, table_name, row_dict):
+        self.cursor.execute("describe %s" % table_name)
+        allowed_keys = set(row[0] for row in self.cursor.fetchall())
+        keys = allowed_keys.intersection(row_dict)
+
+        if len(row_dict) > len(keys):
+            unknown_keys = set(row_dict) - allowed_keys
+            print("skipping keys:" + ", ".join(unknown_keys))
+
+        columns = ", ".join(keys)
+        values_template = ", ".join(["%s"] * len(keys))
+
+        sql = "insert into %s (%s) values (%s)" % (table_name, columns, values_template)
+        values = tuple(row_dict[key] for key in keys)
+
+        self.cursor.execute(sql, values)
 
     def __del__(self):
         self.cursor.close()
@@ -161,4 +177,4 @@ db = SammobileMysql()
 
 sample = {'firmware_country_carrier': 'China (Open China)', 'baidu_download_secret': '', 'sm_model_url': 'http://www.sammobile.com/firmwares/database/SM-N9200/', 'firmware_changelist': '5970428', 'baidu_download_url': '', 'sm_firmware_id': '59300', 'sm_firmware_download_url': 'http://www.sammobile.com/firmwares/confirm/59300/N9200ZCU2AOJ9_N9200CHC2AOJ9_CHC', 'firmware_android_version': 'Android 5.1.1', 'sm_firmware_detail_url': 'http://www.sammobile.com/firmwares/download/59300/N9200ZCU2AOJ9_N9200CHC2AOJ9_CHC', 'firmware_pda': 'N9200ZCU2AOJ9', 'model_series': 'GALAXY Note 5', 'firmware_csc': 'N9200CHC2AOJ9', 'firmware_area_code': 'CHC', 'firmware_build_date': 'Thu, 22 Oct 2015 12:11:33 +0000', 'model_name': 'SM-N9200'}
 
-db.insert_sample(sample)
+db.add_row('firmwares', sample)
