@@ -3,6 +3,54 @@ import requests
 from bs4 import BeautifulSoup
 import configparser
 import pymysql
+import time
+
+class SammobileMysql:
+    def __init__(self):
+        config = configparser.ConfigParser()
+        config.read('config.ini')
+
+        self.host = config['mysql']['host']
+        self.user = config['mysql']['user']
+        self.password = config['mysql']['password']
+        self.db = config['mysql']['db']
+        self.connection = pymysql.connect(
+            host=self.host,
+            user=self.user,
+            password=self.password,
+            db=self.db,
+            charset='utf8',
+            cursorclass=pymysql.cursors.DictCursor)
+        self.cursor = self.connection.cursor()
+
+    def is_sm_firmware_id_exist(self, value):
+        sql = "SELECT count(*) as count FROM `firmwares` WHERE `sm_firmware_id`=%s LIMIT 1"
+        self.cursor.execute(sql, value)
+        result = self.cursor.fetchone()
+        return result['count']  # if result['count'] !=0 : firmware exist
+
+    def add_row(self, row_dict):
+        # inspired by : https://mail.python.org/pipermail/tutor/2010-December/080701.html
+        columns = ", ".join(row_dict)
+        values_template = ", ".join(["%s"] * len(row_dict))
+
+        sql = "INSERT INTO `firmwares` (%s) VALUES (%s)" % (columns, values_template)
+        values = tuple(row_dict[key] for key in row_dict)
+
+        self.cursor.execute(sql, values)
+
+    def get_sm_firmware_ids(self):
+        sm_firmware_ids = []
+        sql = "SELECT `sm_firmware_id` FROM `firmwares`"
+        self.cursor.execute(sql)
+        result = self.cursor.fetchall()
+        for r in result:
+            sm_firmware_ids.append(r['sm_firmware_id'])
+        return sm_firmware_ids
+
+    def __del__(self):
+        self.cursor.close()
+        self.connection.close()
 
 
 def get_model_names(keywords):
@@ -44,7 +92,7 @@ def get_model_url(model_name):
 
 
 def get_sm_firmware_detail_urls(model_url):
-    sm_firmware_detail_urls = []
+    pre_sm_firmware_detail_urls = []
 
     soup = BeautifulSoup(requests.get(model_url).text, "html.parser")
     rows = soup.find_all("a", class_="firmware-table-row")
@@ -57,8 +105,28 @@ def get_sm_firmware_detail_urls(model_url):
 
         if href != 'http://www.sammobile.com/firmwares/download//__Unknown':
             sm_firmware_detail_url = href
+            t = sm_firmware_detail_url[44:].split('/')
+            sm_firmware_id = t[0]
+            sm_firmware_detail_url = {sm_firmware_id: sm_firmware_detail_url}
 
-        sm_firmware_detail_urls.append(sm_firmware_detail_url)
+        pre_sm_firmware_detail_urls.append(sm_firmware_detail_url)
+
+    # check if firmware has been added in database for fewer requests
+    pre_sm_firmware_detail_urls_dict = eval(str(pre_sm_firmware_detail_urls).replace('{', '').replace('}', '').replace('[', '{').replace(']', '}'))
+    sm_firmware_detail_urls = []
+
+    pre_sm_firmware_ids = []
+    for d in pre_sm_firmware_detail_urls:
+        for (k, v) in d.items():
+            pre_sm_firmware_ids.append(k)
+
+    db = SammobileMysql()
+    db_ids = db.get_sm_firmware_ids()
+
+    sm_firmware_ids = list((set(pre_sm_firmware_ids)).difference(set(db_ids)))
+
+    for q in sm_firmware_ids:
+        sm_firmware_detail_urls.append(pre_sm_firmware_detail_urls_dict[q])
 
     return sm_firmware_detail_urls
 
@@ -104,65 +172,15 @@ def get_firmware_detail(sm_firmware_detail_url):
 
 # keywords = ['Note 3', 'Note 4', 'Note 5', 'Note Edge']
 
-# keywords = ['Note 5']
-# model_names = get_model_names(keywords)
-# for model_name in model_names:
-#     model_url = get_model_url(model_name)
-#     sm_firmware_detail_urls = get_sm_firmware_detail_urls(model_url)
-#     for sm_firmware_detail_url in sm_firmware_detail_urls:
-#         firmware_detail = get_firmware_detail(sm_firmware_detail_url)
-#         print(firmware_detail)
-
-
-class SammobileMysql:
-
-    def __init__(self):
-        config = configparser.ConfigParser()
-        config.read('config.ini')
-
-        self.host = config['mysql']['host']
-        self.user = config['mysql']['user']
-        self.password = config['mysql']['password']
-        self.db = config['mysql']['db']
-        self.connection = pymysql.connect(
-            host=self.host,
-            user=self.user,
-            password=self.password,
-            db=self.db,
-            charset='utf8')
-        self.cursor = self.connection.cursor()
-
-    def is_exist(self, key, value):
-        sql = "SELECT (1) FROM `firmwares` WHERE %s=%s LIMIT 1"
-        if self.cursor.execute(sql, (key, value)):
-            return 1
-
-    def add_row(self, table_name, row_dict):
-        # inspired by : https://mail.python.org/pipermail/tutor/2010-December/080701.html
-        self.cursor.execute("describe %s" % table_name)
-        allowed_keys = set(row[0] for row in self.cursor.fetchall())
-        keys = allowed_keys.intersection(row_dict)
-
-        if len(row_dict) > len(keys):
-            unknown_keys = set(row_dict) - allowed_keys
-            print("skipping keys:" + ", ".join(unknown_keys))
-
-        columns = ", ".join(keys)
-        values_template = ", ".join(["%s"] * len(keys))
-
-        sql = "insert into %s (%s) values (%s)" % (table_name, columns, values_template)
-        values = tuple(row_dict[key] for key in keys)
-
-        self.cursor.execute(sql, values)
-
-    def __del__(self):
-        self.cursor.close()
-        self.connection.close()
-
-db = SammobileMysql()
-# print(db.is_exist('sm_firmware_id', '5471438'))
-
-
-sample = {'firmware_country_carrier': 'China (Open China)', 'baidu_download_secret': '', 'sm_model_url': 'http://www.sammobile.com/firmwares/database/SM-N9200/', 'firmware_changelist': '5970428', 'baidu_download_url': '', 'sm_firmware_id': '59300', 'sm_firmware_download_url': 'http://www.sammobile.com/firmwares/confirm/59300/N9200ZCU2AOJ9_N9200CHC2AOJ9_CHC', 'firmware_android_version': 'Android 5.1.1', 'sm_firmware_detail_url': 'http://www.sammobile.com/firmwares/download/59300/N9200ZCU2AOJ9_N9200CHC2AOJ9_CHC', 'firmware_pda': 'N9200ZCU2AOJ9', 'model_series': 'GALAXY Note 5', 'firmware_csc': 'N9200CHC2AOJ9', 'firmware_area_code': 'CHC', 'firmware_build_date': 'Thu, 22 Oct 2015 12:11:33 +0000', 'model_name': 'SM-N9200'}
-
-db.add_row('firmwares', sample)
+keywords = ['Note 5']
+model_names = get_model_names(keywords)
+for model_name in model_names:
+    model_url = get_model_url(model_name)
+    sm_firmware_detail_urls = get_sm_firmware_detail_urls(model_url)
+    print(len(sm_firmware_detail_urls))
+    for sm_firmware_detail_url in sm_firmware_detail_urls:
+        time.sleep(10)
+        db = SammobileMysql()
+        firmware_detail = get_firmware_detail(sm_firmware_detail_url)
+        db.add_row(firmware_detail)
+        print(firmware_detail['firmware_pda'] + ' added!')

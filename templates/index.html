@@ -1,0 +1,31 @@
+{% extends "layout.html" %}
+{% block body %}
+    <table class="table">
+    <thead>
+    <tr>
+        <th>型号</th>
+        <th>地区</th>
+        <th>安卓版本</th>
+        <th>创建时间</th>
+        <th>PDA版本</th>
+        <th>CSC版本</th>
+        <th>下载地址</th>
+    </tr>
+    </thead>
+    <tbody>
+    {%  for firmware in firmwares %}
+    <tr>
+        <td>{{firmware.model_name}}</td>
+        <td>{{firmware.firmware_country_carrier}}</td>
+        <td>{{firmware.firmware_android_version}}</td>
+        <td>{{firmware.firmware_build_date}}</td>
+        <td>{{firmware.firmware_pda}}</td>
+        <td>{{firmware.firmware_csc}}</td>
+        <td><a href="#">点击下载</a></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+
+    </table>
+
+{% endblock %}
